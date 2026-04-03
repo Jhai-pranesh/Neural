@@ -1,0 +1,67 @@
+# --- Secrets (never commit) ---
+.env
+.env.*
+*.env
+!.env.example
+!env.example
+
+# --- Vercel (local CLI link / cache) ---
+.vercel
+
+# --- Python ---
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+
+# --- Node / frontend (Vite, npm) ---
+node_modules/
+**/node_modules/
+frontend/react_component/dist/
+frontend/react_app/dist/
+*.local
+
+# --- Logs & temp ---
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+.cache/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Editors (optional — uncomment if you don’t want these in git) ---
+# .vscode/
+# .idea/

@@ -1,0 +1,16 @@
+I want to upgrade my current Streamlit app into a high-end, custom React frontend.
+
+Task Objective: Convert the existing minimal UI into a modern, responsive React-based experience while keeping the Python backend logic intact.
+
+Technical Architecture:
+Component Setup: Initialize a 'Streamlit Custom Component' structure. Create a frontend/ directory using Vite + React + Tailwind CSS.
+Theme: Apply a 'Refined Dark Mode' with a glassmorphism aesthetic. Use a primary color of Sapphire Blue (#0F172A) and accented highlights.
+Bridge Logic: - Use streamlit-component-lib to handle bi-directional data flow.
+UI Components: Implement Shadcn/UI or Framer Motion for interactive elements. I want micro-animations on button hovers and smooth transitions between states.
+
+Execution Steps:
+
+Scan my current app.py to identify all inputs (buttons, sliders, text) and outputs (graphs, tables).
+Recreate these widgets as custom React components that look like a premium SaaS dashboard.
+Provide the final app.py wrapper that imports and renders the new React component.
+Constraint: Do not remove any existing Python logic; only replace the st.xxx visual calls with the new custom component calls. Let's start by scaffolding the React directory."
