@@ -1,0 +1,8 @@
+# Optional Blueprint: New → Blueprint → connect repo. Or copy build/start into your existing Web Service.
+services:
+  - type: web
+    name: neuralsearch-api
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
