@@ -7,7 +7,7 @@
 
 # --- Vercel (local CLI link / cache) ---
 .vercel
-
+Logs.txt
 # --- Python ---
 .venv/
 venv/
