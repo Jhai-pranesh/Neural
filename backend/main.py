@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 app = FastAPI(title="NeuralSearch Prime API")
 
+_cors_extra = [
+    o.strip()
+    for o in os.getenv("CORS_ORIGINS", "").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -25,6 +30,7 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:4173",
         "http://127.0.0.1:4173",
+        *_cors_extra,
     ],
     allow_credentials=True,
     allow_methods=["*"],
