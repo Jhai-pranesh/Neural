@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import threading
 import time
 from typing import Any, Dict, List, Literal, Optional
 
@@ -10,13 +11,45 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from serpapi import GoogleSearch
-from sentence_transformers import SentenceTransformer, util
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 app = FastAPI(title="NeuralSearch Prime API")
+
+# Lazy-load sentence-transformers so Uvicorn binds to $PORT immediately (Render port scan).
+MODEL_NAME = "all-MiniLM-L6-v2"
+_embedding_model = None
+_st_util = None
+_embedding_lock = threading.Lock()
+_embedding_failed = False
+
+
+def get_sentence_model():
+    """Load MiniLM on first use; avoids blocking startup while downloading/loading weights."""
+    global _embedding_model, _st_util, _embedding_failed
+    if _embedding_failed:
+        return None
+    if _embedding_model is not None:
+        return _embedding_model
+    with _embedding_lock:
+        if _embedding_model is not None:
+            return _embedding_model
+        if _embedding_failed:
+            return None
+        try:
+            from sentence_transformers import SentenceTransformer, util as st_util_module
+
+            logger.info("Loading sentence transformer: %s (first search may take a minute on cold start)", MODEL_NAME)
+            _embedding_model = SentenceTransformer(MODEL_NAME)
+            _st_util = st_util_module
+            logger.info("Loaded sentence transformer: %s", MODEL_NAME)
+        except Exception as e:
+            _embedding_failed = True
+            logger.warning("Sentence transformer failed to load: %s", e)
+            return None
+    return _embedding_model
 
 _cors_extra = [
     o.strip()
@@ -37,30 +70,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MODEL_NAME = "all-MiniLM-L6-v2"
-try:
-    model = SentenceTransformer(MODEL_NAME)
-    logger.info("Loaded sentence transformer: %s", MODEL_NAME)
-except Exception as e:
-    model = None
-    logger.warning("Sentence transformer failed to load: %s", e)
-
-# --- Redis (optional) ---
+# --- Redis (optional): only connect when REDIS_URL is set ---
 CACHE_TTL_SEC = 1800
 RECENT_MAX = 4
 REDIS_RECENT_KEY = "search:recent_keys"
 
 redis_client = None
-try:
-    import redis
+_redis_url = os.getenv("REDIS_URL", "").strip()
+if _redis_url:
+    try:
+        import redis
 
-    _url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    redis_client = redis.from_url(_url, decode_responses=True)
-    redis_client.ping()
-    logger.info("Redis connected at %s", _url)
-except Exception as e:
-    redis_client = None
-    logger.warning("Redis unavailable (caching disabled): %s", e)
+        redis_client = redis.from_url(_redis_url, decode_responses=True)
+        redis_client.ping()
+        logger.info("Redis connected at %s", _redis_url)
+    except Exception as e:
+        redis_client = None
+        logger.warning("Redis unavailable (caching disabled): %s", e)
+else:
+    logger.info("REDIS_URL not set; caching disabled")
 
 
 def normalize_query(q: str) -> str:
@@ -377,7 +405,8 @@ async def search_triple(req: TripleSearchRequest):
         }
         return TripleSearchResponse(**body)
 
-    if model is None:
+    m = get_sentence_model()
+    if m is None or _st_util is None:
         fb: List[SearchResult] = []
         for e in extracted[: req.top_k]:
             fb.append(
@@ -406,9 +435,9 @@ async def search_triple(req: TripleSearchRequest):
         return TripleSearchResponse(**payload)
 
     docs_text = [f"{e['title']} {e['description']}" for e in extracted]
-    query_emb = model.encode(req.query, convert_to_tensor=True)
-    docs_emb = model.encode(docs_text, convert_to_tensor=True)
-    cos_scores = util.cos_sim(query_emb, docs_emb)[0]
+    query_emb = m.encode(req.query, convert_to_tensor=True)
+    docs_emb = m.encode(docs_text, convert_to_tensor=True)
+    cos_scores = _st_util.cos_sim(query_emb, docs_emb)[0]
 
     lexical_r = build_results_for_mode(
         extracted, "lexical", cos_scores, docs_text, req.query, req.top_k
@@ -487,7 +516,8 @@ async def search(req: SearchRequest):
         }
         return SearchResponse(**body)
 
-    if model is None:
+    m = get_sentence_model()
+    if m is None or _st_util is None:
         results: List[SearchResult] = []
         for e in extracted[: req.top_k]:
             results.append(
@@ -515,9 +545,9 @@ async def search(req: SearchRequest):
         return SearchResponse(**payload)
 
     docs_text = [f"{e['title']} {e['description']}" for e in extracted]
-    query_emb = model.encode(req.query, convert_to_tensor=True)
-    docs_emb = model.encode(docs_text, convert_to_tensor=True)
-    cos_scores = util.cos_sim(query_emb, docs_emb)[0]
+    query_emb = m.encode(req.query, convert_to_tensor=True)
+    docs_emb = m.encode(docs_text, convert_to_tensor=True)
+    cos_scores = _st_util.cos_sim(query_emb, docs_emb)[0]
 
     final_results = build_results_for_mode(
         extracted, req.mode, cos_scores, docs_text, req.query, req.top_k
@@ -604,8 +634,9 @@ async def neural_explain(body: NeuralExplainRequest):
 
 @app.get("/health")
 async def health():
+    # Do not call get_sentence_model() here — that would load weights and slow health checks.
     return {
         "redis": bool(redis_client),
-        "model": model is not None,
+        "embedding_model_loaded": _embedding_model is not None,
         "groq_configured": bool(os.getenv("GROQ_API_KEY")),
     }
